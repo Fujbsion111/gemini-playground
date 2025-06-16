@@ -66,13 +66,13 @@ async function handleWebSocket(request, env) {
 	}
   
 	const url = new URL(request.url);
-	const customBaseUrl = url.searchParams.get("base_url");
-        const pathAndQuery = url.pathname + url.search;
-        const targetUrl = customBaseUrl
-          ? `${customBaseUrl}${pathAndQuery}`
-          : `wss://generativelanguage.googleapis.com${pathAndQuery}`;
-  
-  console.log('Using target URL:', targetUrl);
+const targetWsBase = url.searchParams.get(“ws_base”) ||
+“wss://generativelanguage.googleapis.com”;
+  url.searchParams.delete(“ws_base”);
+	const pathAndQuery = url.pathname + url.search;
+	const targetUrl = `${targetWsBase}${pathAndQuery}`;
+	  
+	console.log('Target URL:', targetUrl);
   
   const [client, proxy] = new WebSocketPair();
   proxy.accept();
