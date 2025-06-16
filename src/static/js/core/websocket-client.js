@@ -20,9 +20,6 @@ export class MultimodalLiveClient extends EventEmitter {
      */
     constructor() {
         super();
-		this.baseUrl = options.url || `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.baseUrl  = `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
         this.ws = null;
         this.config = null;
         this.send = this.send.bind(this);
@@ -57,11 +54,7 @@ export class MultimodalLiveClient extends EventEmitter {
      * @returns {Promise<boolean>} - Resolves with true when the connection is established.
      * @throws {ApplicationError} - Throws an error if the connection fails.
      */
-    connect(config,apiKey, customUrl) {
-		// 优先使用传入的自定义URL
-        const wsUrl = customUrl 
-          ? `${customUrl}?key=${apiKey}`
-          : `${this.baseUrl}?key=${apiKey}`;
+    connect(config,apiKey,wsUrl) {
         this.config = {
             ...config,
             tools: [
@@ -69,7 +62,15 @@ export class MultimodalLiveClient extends EventEmitter {
                 ...(config.tools || [])
             ]
         };
-        const ws = new WebSocket(`${this.baseUrl}?key=${apiKey}`);
+        const wsProtocol = window.location.protocol === ‘https:’ ? ‘wss:’
+: ‘ws:’;
+        const defaultBaseUrl = 
+`${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+
+const finalWsUrl = new URL(wsUrl || defaultBaseUrl);
+finalWsUrl.searchParams.set('key', apiKey);
+
+        const ws = new WebSocket(finalWsUrl.toString());
 
         ws.addEventListener('message', async (evt) => {
             if (evt.data instanceof Blob) {
@@ -82,7 +83,7 @@ export class MultimodalLiveClient extends EventEmitter {
         return new Promise((resolve, reject) => {
             const onError = (ev) => {
                 this.disconnect(ws);
-                const message = `Could not connect to "${this.url}"`;
+                const message = `Could not connect to websocket.`;
                 this.log(`server.${ev.type}`, message);
                 throw new ApplicationError(
                     message,
