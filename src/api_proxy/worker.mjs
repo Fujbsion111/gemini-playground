@@ -1,40 +1,79 @@
-//Author: PublicAffairs
-//Project: https://github.com/PublicAffairs/openai-gemini
-//MIT License : https://github.com/PublicAffairs/openai-gemini/blob/main/LICENSE
+// Author: PublicAffairs
+// Project: https://github.com/PublicAffairs/openai-gemini
+// 添加多API支持：Gemini + OpenAI兼容API
 
 import { Buffer } from "node:buffer";
 
+// 支持的API提供商列表
+const API_PROVIDERS = {
+  GEMINI: "gemini",
+  OPENAI_COMPATIBLE: "openai-compatible"
+};
+
+// 环境变量配置（实际部署时应使用Cloudflare Workers的环境变量）
+const CONFIG = {
+  // 默认使用Gemini
+  DEFAULT_PROVIDER: API_PROVIDERS.GEMINI,
+  
+  // 各API的基础URL配置
+  API_BASE_URLS: {
+    [API_PROVIDERS.GEMINI]: "https://generativelanguage.googleapis.com",
+    [API_PROVIDERS.OPENAI_COMPATIBLE]: "https://your-openai-compatible-api.com/v1" // 替换为您的API地址
+  },
+  
+  // API版本配置
+  API_VERSIONS: {
+    [API_PROVIDERS.GEMINI]: "v1beta"
+  }
+};
+
 export default {
-  async fetch (request) {
+  async fetch(request, env) {
     if (request.method === "OPTIONS") {
       return handleOPTIONS();
     }
+
     const errHandler = (err) => {
       console.error(err);
       return new Response(err.message, fixCors({ status: err.status ?? 500 }));
     };
+
     try {
       const auth = request.headers.get("Authorization");
       const apiKey = auth?.split(" ")[1];
+      
+      // 新增：获取API提供商类型 (默认为Gemini)
+      const apiProvider = request.headers.get("X-API-Provider") || CONFIG.DEFAULT_PROVIDER;
+      
+      // 验证API提供商是否有效
+      if (!Object.values(API_PROVIDERS).includes(apiProvider)) {
+        throw new HttpError(`Unsupported API provider: ${apiProvider}`, 400);
+      }
+
       const assert = (success) => {
         if (!success) {
           throw new HttpError("The specified HTTP method is not allowed for the requested resource", 400);
         }
       };
+
       const { pathname } = new URL(request.url);
+
       switch (true) {
         case pathname.endsWith("/chat/completions"):
           assert(request.method === "POST");
-          return handleCompletions(await request.json(), apiKey)
+          return handleCompletions(await request.json(), apiKey, apiProvider)
             .catch(errHandler);
+
         case pathname.endsWith("/embeddings"):
           assert(request.method === "POST");
-          return handleEmbeddings(await request.json(), apiKey)
+          return handleEmbeddings(await request.json(), apiKey, apiProvider)
             .catch(errHandler);
+
         case pathname.endsWith("/models"):
           assert(request.method === "GET");
-          return handleModels(apiKey)
+          return handleModels(apiKey, apiProvider)
             .catch(errHandler);
+
         default:
           throw new HttpError("404 Not Found", 404);
       }
@@ -68,22 +107,48 @@ const handleOPTIONS = async () => {
   });
 };
 
-const BASE_URL = "https://generativelanguage.googleapis.com";
-const API_VERSION = "v1beta";
+const API_CLIENT = "genai-js/0.21.0";
 
-// https://github.com/google-gemini/generative-ai-js/blob/cf223ff4a1ee5a2d944c53cddb8976136382bee6/src/requests/request.ts#L71
-const API_CLIENT = "genai-js/0.21.0"; // npm view @google/generative-ai version
-const makeHeaders = (apiKey, more) => ({
-  "x-goog-api-client": API_CLIENT,
-  ...(apiKey && { "x-goog-api-key": apiKey }),
-  ...more
-});
+const makeHeaders = (apiKey, more, provider) => {
+  // 不同提供商的头部设置
+  const headers = {};
+  
+  if (provider === API_PROVIDERS.GEMINI) {
+    headers["x-goog-api-client"] = API_CLIENT;
+    if (apiKey) headers["x-goog-api-key"] = apiKey;
+  } 
+  else if (provider === API_PROVIDERS.OPENAI_COMPATIBLE) {
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  }
+  
+  return {
+    ...headers,
+    ...more
+  };
+};
 
-async function handleModels (apiKey) {
+async function handleModels(apiKey, provider) {
+  // OpenAI兼容API直接返回支持的模型
+  if (provider === API_PROVIDERS.OPENAI_COMPATIBLE) {
+    return new Response(JSON.stringify({
+      object: "list",
+      data: [
+        { id: "gpt-3.5-turbo", object: "model" },
+        { id: "gpt-4", object: "model" }
+      ]
+    }), fixCors({ status: 200 }));
+  }
+
+  // Gemini处理保持不变
+  const BASE_URL = CONFIG.API_BASE_URLS[provider];
+  const API_VERSION = CONFIG.API_VERSIONS[provider];
+  
   const response = await fetch(`${BASE_URL}/${API_VERSION}/models`, {
-    headers: makeHeaders(apiKey),
+    headers: makeHeaders(apiKey, {}, provider),
   });
+
   let { body } = response;
+  
   if (response.ok) {
     const { models } = JSON.parse(await response.text());
     body = JSON.stringify({
@@ -94,19 +159,36 @@ async function handleModels (apiKey) {
         created: 0,
         owned_by: "",
       })),
-    }, null, "  ");
+    }, null, " ");
   }
+  
   return new Response(body, fixCors(response));
 }
 
 const DEFAULT_EMBEDDINGS_MODEL = "text-embedding-004";
-async function handleEmbeddings (req, apiKey) {
+
+async function handleEmbeddings(req, apiKey, provider) {
+  // OpenAI兼容API处理
+  if (provider === API_PROVIDERS.OPENAI_COMPATIBLE) {
+    const BASE_URL = CONFIG.API_BASE_URLS[provider];
+    const response = await fetch(`${BASE_URL}/embeddings`, {
+      method: "POST",
+      headers: makeHeaders(apiKey, { "Content-Type": "application/json" }, provider),
+      body: JSON.stringify(req)
+    });
+    
+    return new Response(response.body, fixCors(response));
+  }
+
+  // Gemini处理保持不变
   if (typeof req.model !== "string") {
     throw new HttpError("model is not specified", 400);
   }
+
   if (!Array.isArray(req.input)) {
-    req.input = [ req.input ];
+    req.input = [req.input];
   }
+
   let model;
   if (req.model.startsWith("models/")) {
     model = req.model;
@@ -114,18 +196,25 @@ async function handleEmbeddings (req, apiKey) {
     req.model = DEFAULT_EMBEDDINGS_MODEL;
     model = "models/" + req.model;
   }
-  const response = await fetch(`${BASE_URL}/${API_VERSION}/${model}:batchEmbedContents`, {
+
+  const BASE_URL = CONFIG.API_BASE_URLS[provider];
+  const API_VERSION = CONFIG.API_VERSIONS[provider];
+  
+  const response = await fetch(
+    `${BASE_URL}/${API_VERSION}/${model}:batchEmbedContents`, {
     method: "POST",
-    headers: makeHeaders(apiKey, { "Content-Type": "application/json" }),
+    headers: makeHeaders(apiKey, { "Content-Type": "application/json" }, provider),
     body: JSON.stringify({
-      "requests": req.input.map(text => ({
+      requests: req.input.map(text => ({
         model,
         content: { parts: { text } },
         outputDimensionality: req.dimensions,
       }))
     })
   });
+
   let { body } = response;
+  
   if (response.ok) {
     const { embeddings } = JSON.parse(await response.text());
     body = JSON.stringify({
@@ -136,8 +225,96 @@ async function handleEmbeddings (req, apiKey) {
         embedding: values,
       })),
       model: req.model,
-    }, null, "  ");
+    }, null, " ");
   }
+  
+  return new Response(body, fixCors(response));
+}
+
+const DEFAULT_MODEL = "gemini-1.5-pro-latest";
+
+async function handleCompletions(req, apiKey, provider) {
+  // OpenAI兼容API处理
+  if (provider === API_PROVIDERS.OPENAI_COMPATIBLE) {
+    const BASE_URL = CONFIG.API_BASE_URLS[provider];
+    
+    // 转换请求格式为OpenAI兼容格式
+    const openAIReq = {
+      model: req.model || "gpt-3.5-turbo",
+      messages: req.messages,
+      temperature: req.temperature,
+      max_tokens: req.max_tokens,
+      stream: req.stream
+    };
+    
+    const response = await fetch(`${BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: makeHeaders(apiKey, { "Content-Type": "application/json" }, provider),
+      body: JSON.stringify(openAIReq)
+    });
+    
+    // 流式响应直接返回
+    if (req.stream) {
+      return new Response(response.body, fixCors(response));
+    }
+    
+    // 非流式响应
+    const data = await response.json();
+    return new Response(JSON.stringify(data), fixCors(response));
+  }
+
+  // 以下是原有的Gemini处理逻辑（保持不变）
+  let model = DEFAULT_MODEL;
+  switch (true) {
+    case typeof req.model !== "string":
+      break;
+    case req.model.startsWith("models/"):
+      model = req.model.substring(7);
+      break;
+    case req.model.startsWith("gemini-"):
+    case req.model.startsWith("learnlm-"):
+      model = req.model;
+  }
+
+  const BASE_URL = CONFIG.API_BASE_URLS[provider];
+  const API_VERSION = CONFIG.API_VERSIONS[provider];
+  
+  const TASK = req.stream ? "streamGenerateContent" : "generateContent";
+  let url = `${BASE_URL}/${API_VERSION}/models/${model}:${TASK}`;
+  if (req.stream) url += "?alt=sse";
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: makeHeaders(apiKey, { "Content-Type": "application/json" }, provider),
+    body: JSON.stringify(await transformRequest(req)),
+  });
+
+  let body = response.body;
+  
+  if (response.ok) {
+    let id = generateChatcmplId();
+    
+    if (req.stream) {
+      body = response.body
+        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(new TransformStream({
+          transform: parseStream,
+          flush: parseStreamFlush,
+          buffer: "",
+        }))
+        .pipeThrough(new TransformStream({
+          transform: toOpenAiStream,
+          flush: toOpenAiStreamFlush,
+          streamIncludeUsage: req.stream_options?.include_usage,
+          model, id, last: [],
+        }))
+        .pipeThrough(new TextEncoderStream());
+    } else {
+      body = await response.text();
+      body = processCompletionsResponse(JSON.parse(body), model, id);
+    }
+  }
+  
   return new Response(body, fixCors(response));
 }
 
