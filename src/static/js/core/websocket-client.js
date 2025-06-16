@@ -20,6 +20,7 @@ export class MultimodalLiveClient extends EventEmitter {
      */
     constructor() {
         super();
+		this.baseUrl = options.url || `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         this.baseUrl  = `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
         this.ws = null;
@@ -56,7 +57,11 @@ export class MultimodalLiveClient extends EventEmitter {
      * @returns {Promise<boolean>} - Resolves with true when the connection is established.
      * @throws {ApplicationError} - Throws an error if the connection fails.
      */
-    connect(config,apiKey) {
+    connect(config,apiKey, customUrl) {
+		// 优先使用传入的自定义URL
+        const wsUrl = customUrl 
+          ? `${customUrl}?key=${apiKey}`
+          : `${this.baseUrl}?key=${apiKey}`;
         this.config = {
             ...config,
             tools: [
