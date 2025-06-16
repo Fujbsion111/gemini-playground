@@ -62,8 +62,7 @@ export class MultimodalLiveClient extends EventEmitter {
                 ...(config.tools || [])
             ]
         };
-        const wsProtocol = window.location.protocol === ‘https:’ ? ‘wss:’
-: ‘ws:’;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const defaultBaseUrl = 
 `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
 
