@@ -66,9 +66,9 @@ async function handleWebSocket(request, env) {
 	}
   
 	const url = new URL(request.url);
-const targetWsBase = url.searchParams.get(“ws_base”) ||
-“wss://generativelanguage.googleapis.com”;
-  url.searchParams.delete(“ws_base”);
+const targetWsBase = url.searchParams.get("ws_base") ||
+"wss://generativelanguage.googleapis.com";
+  url.searchParams.delete("ws_base");
 	const pathAndQuery = url.pathname + url.search;
 	const targetUrl = `${targetWsBase}${pathAndQuery}`;
 	  
