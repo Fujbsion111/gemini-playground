@@ -17,7 +17,10 @@ async function handleWebSocket(req: Request): Promise<Response> {
   const { socket: clientWs, response } = Deno.upgradeWebSocket(req);
   
   const url = new URL(req.url);
-  const targetUrl = `wss://generativelanguage.googleapis.com${url.pathname}${url.search}`;
+  const customBaseUrl = url.searchParams.get("base_url");
+  const targetUrl = customBaseUrl 
+    ? `${customBaseUrl}${url.pathname}${url.search}`
+    : `wss://generativelanguage.googleapis.com${url.pathname}${url.search}`;
   
   console.log('Target URL:', targetUrl);
   
