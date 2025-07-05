@@ -5,7 +5,7 @@ import { Logger } from '../utils/logger.js';
 import { ToolManager } from '../tools/tool-manager.js';
 
 /**
- * Client for interacting with the Gemini 2.0 Flash Multimodal Live API via WebSockets.
+ * Client for interacting with the Gemini Multimodal Live API via WebSockets.
  * This class handles the connection, sending and receiving messages, and processing responses.
  * It extends EventEmitter to emit events for various stages of the interaction.
  *

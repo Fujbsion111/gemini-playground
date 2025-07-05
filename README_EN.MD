@@ -1,4 +1,4 @@
-# Gemini 2.0 Playground
+# Gemini 2.5 Playground
 
 [中文版](README.MD)
 
@@ -95,7 +95,7 @@ curl --location 'https://your.domain.com/v1/chat/completions' \
             "content": "Testing. Just say hi and nothing else."
         }
     ],
-    "model": "gemini-2.0-flash-exp"
+    "model": "gemini-2.5-flash"
 }'
 ```
 ### ChatBOX：

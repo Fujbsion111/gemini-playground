@@ -1,5 +1,5 @@
-# Gemini 2.0 PlayGround 
-# Gemini 2.0 游乐场
+# Gemini 2.5 PlayGround 
+# Gemini 2.5 游乐场
 
 # [English Version](README_EN.MD)
 
@@ -105,7 +105,7 @@ curl --location 'https://your.domain.com/v1/chat/completions' \
             "content": "Testing. Just say hi and nothing else."
         }
     ],
-    "model": "gemini-2.0-flash-exp"
+    "model": "gemini-2.5-flash"
 }'
 ```
 ### ChatBOX：
